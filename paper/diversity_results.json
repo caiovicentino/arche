@@ -1,0 +1,63 @@
+{
+  "config": {
+    "n_samples": 1000,
+    "length": 128,
+    "device": "mps"
+  },
+  "ar": {
+    "metrics": {
+      "n_samples": 1000,
+      "avg_length_words": 101.194,
+      "vocab_size": 5360,
+      "unique_word_ratio": 0.05296756724706998,
+      "distinct_1": 0.05296756724706998,
+      "distinct_2": 0.27475697147533784,
+      "distinct_3": 0.5313022965098696,
+      "distinct_4": 0.7005316007088009,
+      "unique_first_words": 0.002,
+      "unique_first_5grams": 0.033,
+      "self_bleu": 0.3411578881481421
+    },
+    "gen_time_s": 1227.6615459918976,
+    "samples_first_10": [
+      "Once upon a time, there was a mommy and a baby. They both wanted to go to the store. The mommy wanted to buy a new dress, but the baby was too small. The mommy felt sad, so she decided to make a special dress. \n\nThe baby found pretty ribbons and feathers. The mommy helped the baby choose the sparkly dress. The baby smiled and twirled around in the dress. \n\nWhen they got home, they started to bake the dress. The mommy put the dress on the baby's head and the baby looked in the mirror. The baby felt so",
+      "Once upon a time, there was a little girl. She was only three years old and she loved to explore outdoors. One day, she decided to go explore her garden. As she was walking, she saw something hidden in the grass. She bent down to pick it up. It was a special box. She was so excited that she opened the box and inside was a new, delicate necklace.\n\nThe little girl put the necklace around her neck and felt so special. She wore the necklace every day and it made her look so pretty. She was so happy that she had stumbled all the way up to the sky!\n\n",
+      "Once upon a time, there was a little orange cat. The cat was very fast and loved to run. One day, the cat saw a big, dark ball. The cat was scared, so it ran away.\n\nThe cat ran and ran but it did not know where to go. It was scared. The cat looked around and saw a big tree. The tree had many leaves. The cat was tired, but it was not scared.\n\nThen, the cat heard a voice. \"Do not be scared,\" said the cat. The cat looked up and saw a small mouse. The mouse was scared, but it",
+      "Once upon a time there was a little girl named Sarah. She was only three years old. One day, Sarah was walking in the park with her mum when she saw a pale board lying on the grass. She bent down and picked it up and started playing with it.\n\n\"Mum, look at this pale board!\" said Sarah. She held the board up to her face and looked closer at it.\n\n\"That's a beautiful board,\" said Sarah's mum. She smiled and said, \"Let's find out what you can do with it.\"\n\nSo they looked at the board and then Sarah started to",
+      "Once upon a time, in a small village, there lived a small boy named Tim. Tim was a fearful boy. He was scared of many things. One day, his mom was cooking dinner. She told Tim to be careful around the fire. She said, \"If you eat too much you can spoil dinner.\"\n\nTim tried to be careful, but he saw a big fire. The fire was hot and bright. It made the fire burn. Tim was scared. He stayed away from the fire. His mom held him hand to stay far away from the fire.\n\nTim wished he had listened to his mom. He",
+      "Once upon a time, there was a little girl named Lily. She loved to play outside in the spring. One day, she went for a walk with her mommy and daddy. They walked up a big hill and tried to climb it. At last, Lily got to the top and looked out at the pretty view.\n\nShe saw a big, scary dog with sharp teeth and a loud bark. She started to cry. Her mommy and daddy picked her up and carried her back to the park. They were so proud of her for being brave and using her imagination. When they got home, Lily was tired but happy.",
+      "Once upon a time, there was a little girl named Lily. One day, she went on a walk with her mommy. They saw a big cake on the ground. Lily wanted to eat it, but her mommy said it was too hard. \n\nSuddenly, a man came up to them and asked Lily why she was sad. She told him that she wanted a sweet cookie. The man smiled and gave her a cookie. Lily was happy and ate the cookie. \n\nSuddenly, the man realized that he forgot his wallet at home. He had dropped it on the ground. Lily was sad and scared. But",
+      "Once upon a time there were two friends, Jack and Jill. They liked to do everything together. One day, Jack got a fake medal to keep. The friends both wanted it. They began to fight and shout at each other.\n\nJack was very angry. He threw the fake medal at Jill. Jill was very sad and scared. She ran away and never came back.\n\nJack was very sad. He was so mad that he had to stop. He thought he could never win.\n\nJill tried to cheer him up. She stopped fighting and said, \"I'm sorry, Jack. I wish I couldn",
+      "Once upon a time, there was a kitty. The cat was very curious, and it wanted to explore the world. One day, the kitty went for a walk and discovered a big mail. The mailman gave the kitty a letter to say. \n\nThe kitty was very excited, but also a little confused. The kitty didn't know what the letter meant. She asked the mailman, but the mailman said nothing. Instead, the mailman asked the kitty where the letter was from. \n\nThe kitty cried out of its hiding place and ran away. The kitty was",
+      "Once upon a time, there was a little boy named Timmy. Timmy loved to play with his toy cars and trucks all day long. One day, Timmy's mommy asked him to clean up his room. Timmy didn't want to clean up because he thought cleaning was boring.\n\nHis mommy said, \"Timmy, please clean up your room. It's important to keep our house clean.\"\n\nTimmy replied, \"But I don't want to clean up. Can I just play with my toys instead?\"\n\nHis mommy said, \"No, you need to clean up your room"
+    ]
+  },
+  "mdlm": {
+    "metrics": {
+      "n_samples": 1000,
+      "avg_length_words": 99.236,
+      "vocab_size": 5754,
+      "unique_word_ratio": 0.057982990043935666,
+      "distinct_1": 0.057982990043935666,
+      "distinct_2": 0.29720265483122277,
+      "distinct_3": 0.5420009050146036,
+      "distinct_4": 0.6902718317469554,
+      "unique_first_words": 0.361,
+      "unique_first_5grams": 0.934,
+      "self_bleu": 0.33426338660285354
+    },
+    "gen_time_s": 3081.496876001358,
+    "samples_first_10": [
+      " asked if anyone could play or play with them?\" But mom said no because they were too small to take them away.\" \n\nLily felt sad because she lost her favorite doll! They looked in their room, but they couldn't find one? The boy thought for a moment, then he had an idea. He ran over to the ground and picked it up. \n\nThe boy was so happy that he found his toy car! He played with it all day long and made sure to zoomed around in circles. It was the best fun ever!Once upon a time there lived a little girl named Lily. She loved",
+      "my: \"Did you have fun playing with me? The end!\"Once upon a time, there was a little girl named Lily who always loved going on adventures trips with her family. One day, she found an orange car that looked so pretty! She asked her dad if they could go to the store and buy some candy. \n\nWhen they got home, Lily and her mom went to the store. Lily saw a big new toy that she wanted really badly! Her mom said it was too expensive for them.\" She felt sad, but then she remembered how much money had worked at night\n Soily decided to ask their parents",
+      " Mom asks.\n\n\"Yes, we can,\" Anna and Ben say. They run to the door.\"\n\nMom opens the door. She sees their faces! She hugs them and says: \"You are very brave, creative! And I'm proud of you!\"\n\n\n\nAnna and Ben feel happy. They hug their mom back and say: \"We love you too! You are the best mom ever!\"Tom or Lily were twins who both like to play with toys in a room? But sometimes they fight over one over things because they always fought at each other's\". But Tom did not care that he would quarrel by He",
+      "'t have anyone say hello\". The girl waved back and said: 'Hi glad I'm Sara'. Do you want want to be your friend?\" \nSara smiled and hugged her mom again She said, \"Thank you for making me happy? Can we come with us? You're my best friend! And I love you too.\"Lily and Ben are friends. They like to play in the park. One day, they see a new thing in the grass: it was a big flower! It is very tall and has many colors.\n\n\"Wow, look at this flower!\" Lily says. \"It is so pretty",
+      " 'I am so glad you hugged me too\". She replied: 'Yes - I'm proud of you!\"Once upon a time there were two best friends named Timmy who lived three years old. They both loved to play and learn together! Every week They would explore their neighbourhood looking for new things.\n\nOne day, they saw a big box in the park. Tim was curious and wanted to see what it looked like. He asked his mom, \"Mommy what is this thing?\" His mom smiled and said: \"That's a special object! It's something very valuable.\" \nTimmy was so excited that he",
+      " happy. They hug each other.\n\n\"We love you, Mom,\" Anna says. \"You are the best mom ever.\" \nMom hugs them. She is proud of Anna and Ben too! She knows they loved her! And she loves them very much!\"Anna and Ben were playing with their toy cars in the living room when they heard a loud noise: It was an alarm coming from from its kitchen\". They were curious but wanted to see what it did?\n\n\nThey opened the door and saw a big red car! The truck had four wheels, two horn that looked like \"reverse\". It had shiny lights on",
+      " little girl named named Lily\". She loved playing together outside or having adventures! One day when her mom had told her they were going on an adventure! \n\n\nLily: \"Mommy, can we go home now?\" she asked: \"Yes,Of course you can come my way,\" Ben said.\n\nThey packed their bags and ran to the park. They saw a big tree with a hole in it. It was dark and scary! \n\"Let's go see what happens!\" exclaimed Lily. \ufffd\"OK, but be careful not to get too close.\" Mommy warned them to stay away from the",
+      "'s so pretty?\" Her mother replied: \"Yes please? You can have one of your old dress.\" \n\nLily felt very happy that she hugged her mom and said: \"Thank you, Mommy! I love my new dress!\" Her mom smiled and said: \"You're welcome - I'm glad you like it too.\" The end.Once upon a time, there was a little girl named Lily. She loved to play with her toys and read books. One day, she found an unusual toy in the attic! It had many colors and shapes on its face but Lily was so excited to see it! \n",
+      " his new car - Lucy felt very happy! She hugged her dad tightly: \"ThankThank you for letting me borrow my toy my new car!\" Her brother smiled and replied: \"I'm glad I had fun with you.\" The end!Once upon a time, there was a little girl named Lily. She loved to play with her toys and run around outside. One day, she was playing in the park when she saw some big shapes on the ground. It looked so pretty, but it didn't look nice! \n\nLily's mom came over and asked if they could have one too?\" Lily said mom said yes \"",
+      " my friend but I will always be your friend.\" \nThe two boys were best friends and they both loved to play together. They had lots of fun!One day the boy was playing with his toys. Suddenly, he heard a loud noise - It sounded like thunder! He looked up and saw a bird flying in the sky. \n\nThe boy was so happy that he started to run around in circles, making funny noises as it flew through the air!\" The little girl laughed and said: \"That's so cool!\" She gave him another big hug before she replied \"I love you you too, son\".Once upon there"
+    ]
+  }
+}
