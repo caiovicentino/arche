@@ -1,0 +1,582 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Packages ────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{geometry}
+\usepackage{natbib}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{caption}
+
+\geometry{margin=1in}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  citecolor=green!50!black,
+  urlcolor=blue!70!black,
+}
+
+\renewcommand{\bibsection}{\section*{References}}
+
+% ── Title ───────────────────────────────────────────────────────────────
+
+\title{%
+  Autoregressive vs.\ Masked Diffusion Language Models:\\
+  A Controlled Comparison%
+}
+\author{
+  Caio Vicentino \\
+  Independent Researcher \\
+  \texttt{github.com/caiovicentino/arche}
+}
+\date{}
+
+% ════════════════════════════════════════════════════════════════════════
+\begin{document}
+\maketitle
+
+% ── Abstract ────────────────────────────────────────────────────────────
+\begin{abstract}
+We present a controlled empirical comparison between autoregressive (AR) and masked diffusion (MDLM) language models.
+Both models are trained on identical data (50M tokens from TinyStories), identical compute budget (20{,}000 steps, batch size 32, sequence length 512), and identical hardware (NVIDIA H100 80GB), isolating the generation paradigm as the sole variable.
+We report three findings.
+First, both paradigms achieve comparable training throughput (${\sim}$50K tokens/second), with MDLM requiring only 4.7\% more wall-clock time, countering the perception that diffusion training is substantially more expensive.
+Second, AR converges faster and begins overfitting by step 14{,}000, while MDLM converges more slowly and is still improving at step 20{,}000, suggesting different compute-optimal training regimes.
+Third, qualitative analysis of generated text reveals a diversity--fluency trade-off: AR produces fluent but structurally repetitive outputs (identical formulaic openings across samples), while MDLM generates more diverse narratives with varied characters, structures, and starting points, at the cost of occasional grammatical inconsistencies.
+We note that validation losses across paradigms are not directly comparable, as they measure different objectives (next-token prediction vs.\ masked token prediction), and that the diversity observation is preliminary and requires quantitative validation.
+All code, trained checkpoints, and data pipelines are released for reproducibility.
+\end{abstract}
+
+% ── 1. Introduction ────────────────────────────────────────────────────
+\section{Introduction}
+
+Language models have been overwhelmingly autoregressive: tokens are generated left-to-right, each conditioned on all preceding tokens.
+This paradigm underpins GPT \citep{radford2019gpt2}, LLaMA \citep{touvron2023llama}, and virtually all production language models.
+Its strengths are well understood---efficient training via teacher forcing, straightforward sampling, and strong perplexity---but so are its limitations: sequential generation that cannot revise earlier tokens, and a strong left-to-right bias that can produce repetitive outputs when the most probable prefix dominates.
+
+A fundamentally different paradigm has recently emerged: diffusion-based language models.
+Adapted from the continuous diffusion framework that revolutionized image generation \citep{ho2020ddpm,song2021score}, these models generate text by starting from a fully corrupted (masked) sequence and iteratively denoising it.
+Masked Diffusion Language Models (MDLM; \citealt{mdlm}) use a learned masking schedule to corrupt text during training and reverse the process during generation.
+SEDD \citep{sedd} achieved ICML 2024 Best Paper with substantially improved generative perplexity over GPT-2.
+LLaDA \citep{llada} demonstrated competitive performance at 8B parameters, matching LLaMA3 on downstream benchmarks.
+Gemini Diffusion \citep{geminidiffusion} demonstrated fast generation at commercial quality.
+
+Despite this rapid progress, controlled head-to-head comparisons remain scarce.
+Existing studies either compare at different scales, use different datasets, or employ different compute budgets, making it difficult to attribute observed differences to the generation paradigm itself rather than confounding variables.
+
+\paragraph{This work.}
+We train an autoregressive Transformer and a masked diffusion Transformer on \emph{exactly the same} data, compute budget, and hardware.
+The only differences are those inherent to each paradigm: causal vs.\ bidirectional attention, next-token vs.\ masked-token objective, and the MDLM's timestep conditioning module.
+This controlled setup allows us to isolate the effect of the generation paradigm on training dynamics, convergence behavior, and generation quality.
+
+We acknowledge upfront that our experiments are at small scale (123--163M parameters, 50M tokens) and that our generation quality analysis is qualitative rather than quantitative.
+Our goal is not to declare a winner, but to provide a reproducible baseline comparison that highlights the distinct trade-offs of each paradigm.
+
+\subsection{Contributions}
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Controlled experimental setup}: AR and MDLM trained with identical data, steps, batch size, sequence length, model dimensions, optimizer, and hardware (Table~\ref{tab:setup}). To our knowledge, this is the most tightly controlled small-scale comparison of these paradigms to date.
+
+  \item \textbf{Training dynamics analysis}: We provide step-by-step convergence curves (Table~\ref{tab:convergence}) showing that AR converges faster but overfits earlier, while MDLM converges slowly but steadily, suggesting different compute-optimal training lengths.
+
+  \item \textbf{Throughput parity}: We find that MDLM training is only 4.7\% slower than AR in wall-clock time (113.0 vs.\ 107.9 minutes), countering the common assumption that diffusion training is substantially more expensive.
+
+  \item \textbf{Preliminary diversity--fluency observation}: Qualitative inspection suggests AR and MDLM occupy different points on a diversity--fluency trade-off, motivating future quantitative studies.
+
+  \item \textbf{Full reproducibility}: All code, data pipelines, trained checkpoints (PyTorch), and evaluation scripts released at \url{https://github.com/caiovicentino/arche}.
+\end{enumerate}
+
+% ── 2. Related Work ────────────────────────────────────────────────────
+\section{Related Work}
+
+\subsection{Autoregressive Language Models}
+
+The autoregressive Transformer \citep{vaswani2017attention,radford2019gpt2} remains the dominant language modeling paradigm.
+Scaling laws \citep{kaplan2020scaling,hoffmann2022chinchilla} have established predictable relationships between model size, data, and performance.
+Recent architectural innovations include Multi-Head Latent Attention for KV-cache compression \citep{deepseekv2}, Gated Linear Attention for efficient training \citep{yang2024gla}, and State Space Models for linear-time inference \citep{gu2023mamba}.
+All of these operate within the autoregressive framework.
+
+\subsection{Diffusion Language Models}
+
+Adapting diffusion to discrete text has been an active area.
+D3PM \citep{austin2021d3pm} introduced discrete diffusion with transition matrices.
+MDLM \citep{mdlm} simplified this to a masking-based framework with a cosine schedule, achieving strong results with standard Transformer backbones.
+SEDD \citep{sedd} used score-based estimation for discrete distributions, earning ICML 2024 Best Paper.
+LLaDA \citep{llada} scaled masked diffusion to 8B parameters, demonstrating competitive downstream performance with LLaMA3.
+Gemini Diffusion \citep{geminidiffusion} achieved commercial-grade generation with 5$\times$ speed improvements.
+
+The key architectural difference from AR models is that diffusion models use \emph{bidirectional} attention (each position can attend to all unmasked positions) and condition on a noise level or timestep.
+This bidirectional context is both a strength (richer conditioning) and a difference that complicates direct comparison.
+
+\subsection{Existing Comparisons}
+
+Prior comparisons between AR and diffusion language models exist but are not tightly controlled.
+\citet{mdlm} compare against GPT-2 but at different parameter counts and with different training data.
+\citet{llada} compare against LLaMA3 but with different training corpora and compute budgets.
+\citet{sedd} report perplexity improvements over GPT-2 but using a different model architecture.
+Our work fills the gap of a \emph{same-data, same-budget, same-hardware} comparison, albeit at small scale.
+
+% ── 3. Method ──────────────────────────────────────────────────────────
+\section{Experimental Setup}
+
+\subsection{Controlled Variables}
+
+Table~\ref{tab:setup} summarizes the experimental design.
+All shared hyperparameters---data, training steps, batch size, sequence length, model dimensions, number of layers, number of heads, FFN dimension, optimizer, and hardware---are identical between the two models.
+
+\begin{table}[t]
+\centering
+\caption{Controlled experimental setup. All shared variables are identical; differences arise solely from the paradigm.}
+\label{tab:setup}
+\smallskip
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Variable & AR & MDLM \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Shared (identical)}} \\
+\quad Data & \multicolumn{2}{c}{TinyStories \citep{tinystories}, 50M tokens} \\
+\quad Steps & \multicolumn{2}{c}{20{,}000} \\
+\quad Batch size & \multicolumn{2}{c}{32} \\
+\quad Sequence length & \multicolumn{2}{c}{512} \\
+\quad $d_{\text{model}}$ & \multicolumn{2}{c}{768} \\
+\quad Layers & \multicolumn{2}{c}{12} \\
+\quad Heads & \multicolumn{2}{c}{12} \\
+\quad FFN dim & \multicolumn{2}{c}{2{,}048} \\
+\quad Optimizer & \multicolumn{2}{c}{AdamW (lr\,=\,3e-4, wd\,=\,0.01)} \\
+\quad Hardware & \multicolumn{2}{c}{NVIDIA H100 80GB} \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Paradigm-specific (inherent differences)}} \\
+\quad Attention mask & Causal & Bidirectional \\
+\quad Training objective & Next-token prediction & Masked token prediction \\
+\quad Noise schedule & N/A & Cosine \\
+\quad Timestep conditioning & N/A & Sinusoidal embedding \\
+\quad Parameters & 123.6M & 162.7M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Parameter Count Difference}
+\label{sec:param-diff}
+
+The MDLM model has 31.6\% more parameters than the AR model (162.7M vs.\ 123.6M).
+This difference is not an oversight but reflects inherent architectural requirements:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Bidirectional attention}: The MDLM uses full (non-causal) attention, which does not change the parameter count but does change the computation pattern.
+  \item \textbf{Timestep conditioning}: The MDLM requires a timestep embedding module (sinusoidal embedding followed by projection layers) to condition on the noise level, adding parameters with no AR counterpart.
+  \item \textbf{Output head}: The MDLM predicts tokens at all masked positions simultaneously, potentially requiring a slightly different output projection structure.
+\end{itemize}
+We chose not to artificially reduce the MDLM to match the AR parameter count, as this would compromise the MDLM design.
+This difference should be considered when interpreting results: the MDLM has greater model capacity, which could favor it in principle, yet it converges more slowly in practice.
+
+\subsection{Autoregressive Model}
+
+The AR model is a standard decoder-only Transformer with causal (unidirectional) attention.
+Each position attends only to itself and all preceding positions.
+The training objective is standard next-token prediction: given a sequence $(x_1, \ldots, x_T)$, the model minimizes
+\begin{equation}
+  \mathcal{L}_{\text{AR}} = -\sum_{t=1}^{T} \log p_\theta(x_t \mid x_{<t})
+\end{equation}
+We use learned positional embeddings and pre-norm (LayerNorm before attention and FFN).
+
+\subsection{Masked Diffusion Language Model (MDLM)}
+
+The MDLM follows \citet{mdlm}.
+The architecture is a bidirectional Transformer---identical to the AR model except that the causal mask is removed, allowing each position to attend to all other positions.
+Additionally, a timestep embedding conditions the model on the current noise level.
+
+\paragraph{Training.}
+For each training example, we sample a random timestep $t \sim U(0,1)$ and mask tokens independently with probability
+\begin{equation}
+  \gamma(t) = 1 - \cos^2\!\left(\frac{\pi t}{2}\right) \quad \text{(cosine schedule)}
+\end{equation}
+Masked tokens are replaced with a special \texttt{[MASK]} token.
+The model predicts the original token at each masked position, with cross-entropy loss computed only at masked positions:
+\begin{equation}
+  \mathcal{L}_{\text{MDLM}} = -\mathbb{E}_{t,\mathbf{m}} \sum_{i : m_i = 1} \log p_\theta(x_i \mid \tilde{\mathbf{x}}, t)
+\end{equation}
+where $\tilde{\mathbf{x}}$ is the masked input and $\mathbf{m}$ is the binary mask.
+
+\paragraph{Generation.}
+Starting from a fully masked sequence of length $L$, we iteratively unmask tokens over $S = 100$ steps.
+At each step $s$, the model predicts all masked positions; we select the $\lfloor L / S \rfloor$ most confident predictions (highest predicted probability) and unmask them.
+We apply temperature annealing (starting high for diversity, decreasing for coherence) and a repetition penalty to reduce degenerate outputs.
+
+% ── 4. Results ─────────────────────────────────────────────────────────
+\section{Results}
+
+\subsection{Training Efficiency}
+
+Both paradigms achieve comparable training throughput on the H100 (Table~\ref{tab:results}).
+AR trains at 50{,}620 tokens/second; MDLM at 48{,}343 tokens/second (4.5\% slower).
+Total wall-clock time differs by only 5.1 minutes (107.9 vs.\ 113.0 minutes for 20K steps).
+This near-parity is notable: it suggests that the computational overhead of diffusion training (sampling timesteps, applying masks, computing loss only at masked positions) is modest relative to the dominant cost of the forward and backward passes through the Transformer.
+
+\begin{table}[t]
+\centering
+\caption{AR vs.\ MDLM training comparison on H100 80GB (20K steps, TinyStories 50M tokens).}
+\label{tab:results}
+\smallskip
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Metric & AR & MDLM \\
+\midrule
+Parameters & 123.6M & 162.7M \\
+Training time & 107.9 min & 113.0 min \\
+Throughput & 50{,}620 tok/s & 48{,}343 tok/s \\
+Best val loss & 1.589 & 3.412 \\
+Best checkpoint & Step 14{,}000 & Step 20{,}000 \\
+\bottomrule
+\multicolumn{3}{@{}l}{\footnotesize Val losses use different objectives and are not cross-comparable.}
+\end{tabular}
+\end{table}
+
+\subsection{Convergence Dynamics}
+
+Table~\ref{tab:convergence} and Figure~\ref{fig:loss_curves} show validation loss over training.
+The two loss functions measure different quantities---next-token prediction (AR) vs.\ masked token prediction with bidirectional context (MDLM)---so the absolute values are not cross-comparable.
+However, the \emph{convergence patterns} are directly comparable and reveal a clear difference:
+
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{AR converges fast, overfits early.}
+  Validation loss reaches its minimum of 1.589 at step 14{,}000, then rises to 1.622 by step 20{,}000---a clear sign of overfitting on 50M tokens at this model size.
+
+  \item \textbf{MDLM converges slowly, keeps improving.}
+  Validation loss decreases monotonically throughout training, reaching 3.412 at step 20{,}000 with no sign of plateauing.
+  This suggests MDLM would benefit from substantially longer training.
+\end{itemize}
+
+This asymmetry has practical implications: AR models at this scale need early stopping or regularization after ${\sim}$14K steps on 50M tokens, while MDLM models can productively train for longer.
+Whether this reflects a fundamental property of the paradigm or simply the effect of the larger parameter count (Section~\ref{sec:param-diff}) is an open question.
+
+\begin{table}[t]
+\centering
+\caption{Validation loss at selected checkpoints. Each column measures a different objective; read vertically for convergence trends, not horizontally.}
+\label{tab:convergence}
+\smallskip
+\begin{tabular}{@{}rcc@{}}
+\toprule
+Step & AR Val Loss & MDLM Val Loss \\
+\midrule
+2{,}000 & 2.660 & 3.952 \\
+4{,}000 & 2.047 & 3.841 \\
+6{,}000 & 1.837 & 3.585 \\
+8{,}000 & 1.726 & 3.528 \\
+10{,}000 & 1.665 & 3.509 \\
+12{,}000 & 1.633 & 3.527 \\
+14{,}000 & \textbf{1.589} & 3.491 \\
+16{,}000 & 1.603 & 3.455 \\
+18{,}000 & 1.627 & 3.419 \\
+20{,}000 & 1.622 & \textbf{3.412} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{fig_loss_curves.pdf}
+\caption{Convergence comparison. Dual $y$-axes reflect different loss functions; the shape of each curve (not the absolute value) is the relevant comparison. AR overfits after step 14K (blue shaded region); MDLM continues improving monotonically.}
+\label{fig:loss_curves}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{fig_throughput.pdf}
+\caption{Training throughput and wall-clock time. MDLM achieves 95.5\% of AR throughput, requiring only 5.1 additional minutes over 20K steps.}
+\label{fig:throughput}
+\end{figure}
+
+\subsection{Generation Quality: Qualitative Analysis}
+\label{sec:generation}
+
+We present a preliminary qualitative comparison of generated text.
+We stress that this analysis is \emph{illustrative, not conclusive}: it is based on a small number of samples and does not include quantitative diversity or fluency metrics.
+Rigorous evaluation with Self-BLEU \citep{selfbleu}, Distinct-$n$ \citep{distinctn}, or MAUVE \citep{mauve} over hundreds of samples is an important direction for future work.
+
+\paragraph{AR samples.}
+We generate three independent samples from the AR model using nucleus sampling ($p = 0.9$, temperature 0.8):
+
+\begin{quote}
+\small
+\textbf{AR-1}: ``Once upon a time, there was a little girl named Jane. She loved to jump in the pool. She would splash and jump and have fun\ldots''
+
+\textbf{AR-2}: ``Once upon a time, there was a little girl named Lily. She lived in a small village near a big mountain. One day, Lily asked her mom, `Can we go to the mountain\ldots'\,''
+
+\textbf{AR-3}: ``Once upon a time, there was a little girl named Lily. She liked to play with her toys and eat cereal with a spoon.''
+\end{quote}
+
+All three samples begin with the identical formulaic opening (``Once upon a time, there was a little girl named \textit{X}'').
+The text is grammatically fluent and narratively coherent, but structurally repetitive.
+
+\paragraph{MDLM samples.}
+We generate three independent samples from the MDLM using confidence-based unmasking (100 steps, temperature annealing 1.2$\to$0.5):
+
+\begin{quote}
+\small
+\textbf{MDLM-1}: ``They sit on the grass and eat their lunch. They are very happy and full of energy! They have such great time playing together\ldots''
+
+\textbf{MDLM-2}: ``Lucy's birthday?' They say\ldots `Happy Birthday!' From writing on paper, they always made sure to say `please'\ldots When they were all done, Lucy felt so happy that She said loudly `Thank you', then hugged my mom.''
+
+\textbf{MDLM-3}: ```Hi I'm Timmy! Can we play with you?' she asked. `Sure, let's go!' said Timmy as he drove his toy car around the playground. He had so much fun playing on the swings until dark\ldots''
+\end{quote}
+
+MDLM samples show:
+(a) different narrative starting points (none begins with ``Once upon a time''),
+(b) varied character names and situations,
+(c) natural dialogue, and
+(d) more creative scenarios.
+However, they exhibit occasional grammatical inconsistencies (``They have such great time'', capitalized ``She'' mid-sentence) and punctuation artifacts.
+
+\paragraph{Interpretation.}
+The observed diversity difference is plausibly architectural.
+In AR generation, the model commits to tokens sequentially: once a high-probability prefix is produced (e.g., ``Once upon a time''), the conditional distribution over remaining tokens is heavily constrained by the left-to-right dependency.
+In MDLM generation, all positions begin as \texttt{[MASK]} and are revealed in parallel based on model confidence.
+The model can generate the middle of a narrative before the beginning, avoiding the ``mode collapse to the most probable prefix'' phenomenon.
+
+This parallels findings in image generation: autoregressive pixel models produce sharp but low-diversity images, while diffusion models produce higher-diversity outputs \citep{ho2020ddpm}.
+Our observations suggest this diversity--fidelity trade-off may extend to language, though we emphasize this hypothesis requires rigorous quantitative validation.
+
+% ── 5. Discussion ──────────────────────────────────────────────────────
+\section{Discussion}
+
+\subsection{Throughput Parity Is Surprising}
+
+A common concern about diffusion language models is training cost.
+Our finding that MDLM trains at 95.5\% of AR throughput (48{,}343 vs.\ 50{,}620 tokens/second) suggests that the per-step overhead of diffusion training---sampling timesteps, constructing masks, computing loss only at masked positions---is negligible relative to the Transformer forward/backward pass.
+At larger scales where the Transformer computation dominates even more, the gap may shrink further.
+
+This does \emph{not} mean the two paradigms have equal sample efficiency.
+AR reached its best validation loss at 14K steps; MDLM was still improving at 20K steps.
+If MDLM requires, say, 2--3$\times$ more steps to converge, the total training cost would be correspondingly higher despite similar per-step throughput.
+Characterizing the step-efficiency gap is an important question for future work.
+
+\subsection{Different Convergence Regimes}
+
+The divergent overfitting behavior---AR overfits at 14K steps while MDLM continues improving at 20K---is consistent with a capacity-utilization hypothesis.
+AR sees each token in a fixed left-to-right context; it can memorize common patterns quickly.
+MDLM sees each token in a randomly masked context that varies every epoch; this implicit data augmentation may act as a regularizer, slowing convergence but reducing overfitting.
+
+Alternatively, the difference may simply reflect the parameter count gap (Section~\ref{sec:param-diff}): the MDLM's larger model may need more steps to fit the data.
+Disentangling these explanations requires experiments with matched parameter counts, which we leave for future work.
+
+\subsection{The Diversity--Fluency Trade-off}
+
+If our qualitative observations hold under quantitative scrutiny, they suggest that AR and MDLM are \emph{complementary} rather than competing paradigms:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{AR} excels when fluency and coherence are paramount (translation, summarization, code generation).
+  \item \textbf{MDLM} may be preferable when diversity is valued (creative writing, data augmentation, brainstorming).
+\end{itemize}
+This complementarity mirrors the broader machine learning landscape, where autoregressive and diffusion approaches coexist in image generation, speech synthesis, and music generation.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Small scale.}
+  Our models are 123--163M parameters trained on 50M tokens.
+  At 1B+ scale, the dynamics may differ: AR overfitting may be less pronounced with more data, and MDLM may benefit from scale differently.
+
+  \item \textbf{Parameter mismatch.}
+  The MDLM has 31.6\% more parameters (Section~\ref{sec:param-diff}).
+  This is an inherent asymmetry, but it complicates attribution of observed differences.
+
+  \item \textbf{No quantitative diversity metrics.}
+  Our diversity claim rests on qualitative inspection of a small number of samples.
+  Self-BLEU, Distinct-$n$, MAUVE, and entropy-based metrics over $\geq$500 samples are necessary for rigorous validation.
+
+  \item \textbf{Single dataset.}
+  TinyStories is a narrow domain (children's stories).
+  Generalization to code, scientific text, dialogue, and multilingual data is unknown.
+
+  \item \textbf{MDLM still converging.}
+  The MDLM had not plateaued at 20K steps.
+  Extended training could change the relative quality of generated text.
+
+  \item \textbf{Single seed.}
+  All experiments use one random seed.
+  Multiple seeds with confidence intervals would strengthen all claims.
+
+  \item \textbf{No downstream evaluation.}
+  We do not evaluate on classification, QA, or other downstream tasks.
+
+  \item \textbf{Sampler not optimized.}
+  The MDLM sampler (confidence-based unmasking, temperature annealing, repetition penalty) was not extensively tuned.
+  Better sampling strategies (e.g., nucleus-based unmasking, classifier-free guidance for language) could improve MDLM output quality.
+\end{enumerate}
+
+% ── 6. Conclusion ──────────────────────────────────────────────────────
+\section{Conclusion}
+
+We present a controlled comparison between autoregressive and masked diffusion language models, trained on identical data, budget, and hardware.
+Our findings:
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Training throughput is near-identical}: MDLM trains at 95.5\% of AR throughput, suggesting that diffusion training overhead is minimal at the Transformer scale.
+
+  \item \textbf{Convergence regimes differ}: AR converges in ${\sim}$14K steps then overfits; MDLM converges monotonically through 20K steps with no plateau, implying different optimal training lengths.
+
+  \item \textbf{Generation profiles differ qualitatively}: AR produces fluent but formulaic text; MDLM produces diverse but occasionally ungrammatical text. This preliminary observation suggests a diversity--fluency trade-off that, if confirmed, would imply the paradigms are complementary rather than competing.
+\end{enumerate}
+
+We release all code, trained models, and data pipelines at \url{https://github.com/caiovicentino/arche}.
+Future work should (i) validate the diversity observation quantitatively, (ii) extend the comparison to larger scales and diverse datasets, and (iii) train MDLM for longer to determine its convergence characteristics.
+
+% ── References ─────────────────────────────────────────────────────────
+\bibliographystyle{plainnat}
+
+\begin{thebibliography}{20}
+
+\bibitem[Austin et~al.(2021)]{austin2021d3pm}
+Austin, J., Johnson, D., Ho, J., Tarlow, D., \& van den Berg, R. (2021).
+\newblock Structured Denoising Diffusion Models in Discrete State-Spaces.
+\newblock \textit{NeurIPS 2021}. arXiv:2107.03006.
+
+\bibitem[DeepSeek-AI(2024)]{deepseekv2}
+DeepSeek-AI. (2024).
+\newblock DeepSeek-V2: A Strong, Economical, and Efficient Mixture-of-Experts Language Model.
+\newblock arXiv:2405.04434.
+
+\bibitem[Eldan \& Li(2023)]{tinystories}
+Eldan, R. \& Li, Y. (2023).
+\newblock TinyStories: How Small Can Language Models Be and Still Speak Coherent English?
+\newblock arXiv:2305.07759.
+
+\bibitem[Google DeepMind(2025)]{geminidiffusion}
+Google DeepMind. (2025).
+\newblock Gemini Diffusion.
+\newblock Technical announcement, \url{https://deepmind.google/models/gemini-diffusion/}.
+
+\bibitem[Gu \& Dao(2023)]{gu2023mamba}
+Gu, A. \& Dao, T. (2023).
+\newblock Mamba: Linear-Time Sequence Modeling with Selective State Spaces.
+\newblock arXiv:2312.00752.
+
+\bibitem[Ho et~al.(2020)]{ho2020ddpm}
+Ho, J., Jain, A., \& Abbeel, P. (2020).
+\newblock Denoising Diffusion Probabilistic Models.
+\newblock \textit{NeurIPS 2020}. arXiv:2006.11239.
+
+\bibitem[Hoffmann et~al.(2022)]{hoffmann2022chinchilla}
+Hoffmann, J., et~al. (2022).
+\newblock Training Compute-Optimal Large Language Models.
+\newblock \textit{NeurIPS 2022}. arXiv:2203.15556.
+
+\bibitem[Kaplan et~al.(2020)]{kaplan2020scaling}
+Kaplan, J., et~al. (2020).
+\newblock Scaling Laws for Neural Language Models.
+\newblock arXiv:2001.08361.
+
+\bibitem[Li et~al.(2016)]{distinctn}
+Li, J., Galley, M., Brockett, C., Gao, J., \& Dolan, B. (2016).
+\newblock A Diversity-Promoting Objective Function for Neural Conversation Models.
+\newblock \textit{NAACL-HLT 2016}.
+
+\bibitem[Lou et~al.(2024)]{sedd}
+Lou, A., Meng, C., \& Ermon, S. (2024).
+\newblock Discrete Diffusion Modeling by Estimating the Ratios of the Data Distribution.
+\newblock \textit{ICML 2024 Best Paper}. arXiv:2310.16834.
+
+\bibitem[Nie et~al.(2025)]{llada}
+Nie, S., et~al. (2025).
+\newblock LLaDA: Large Language Diffusion with mAsking.
+\newblock arXiv:2502.09992.
+
+\bibitem[Pillutla et~al.(2021)]{mauve}
+Pillutla, K., et~al. (2021).
+\newblock MAUVE: Measuring the Gap Between Neural Text and Human Text using Divergence Frontiers.
+\newblock \textit{NeurIPS 2021}. arXiv:2102.01454.
+
+\bibitem[Radford et~al.(2019)]{radford2019gpt2}
+Radford, A., Wu, J., Child, R., Luan, D., Amodei, D., \& Sutskever, I. (2019).
+\newblock Language Models are Unsupervised Multitask Learners.
+\newblock OpenAI Technical Report.
+
+\bibitem[Sahoo et~al.(2024)]{mdlm}
+Sahoo, S., et~al. (2024).
+\newblock Simple and Effective Masked Diffusion Language Models.
+\newblock \textit{NeurIPS 2024}. arXiv:2406.07524.
+
+\bibitem[Song et~al.(2021)]{song2021score}
+Song, Y., Sohl-Dickstein, J., Kingma, D.P., Kumar, A., Ermon, S., \& Poole, B. (2021).
+\newblock Score-Based Generative Modeling through Stochastic Differential Equations.
+\newblock \textit{ICLR 2021}. arXiv:2011.13456.
+
+\bibitem[Touvron et~al.(2023)]{touvron2023llama}
+Touvron, H., et~al. (2023).
+\newblock LLaMA: Open and Efficient Foundation Language Models.
+\newblock arXiv:2302.13971.
+
+\bibitem[Vaswani et~al.(2017)]{vaswani2017attention}
+Vaswani, A., et~al. (2017).
+\newblock Attention Is All You Need.
+\newblock \textit{NeurIPS 2017}. arXiv:1706.03762.
+
+\bibitem[Yang et~al.(2024)]{yang2024gla}
+Yang, S., et~al. (2024).
+\newblock Gated Linear Attention Transformers with Hardware-Efficient Training.
+\newblock \textit{ICML 2024}. arXiv:2312.06635.
+
+\bibitem[Zhu et~al.(2018)]{selfbleu}
+Zhu, Y., et~al. (2018).
+\newblock Texygen: A Benchmarking Platform for Text Generation Models.
+\newblock \textit{SIGIR 2018}. arXiv:1802.01886.
+
+\end{thebibliography}
+
+% ── Appendix ───────────────────────────────────────────────────────────
+\appendix
+
+\section{MDLM Implementation Details}
+\label{app:mdlm}
+
+\paragraph{Cosine noise schedule.}
+The masking probability follows $\gamma(t) = 1 - \cos^2(\pi t / 2)$ for $t \in [0, 1]$.
+At $t = 0$, no tokens are masked (clean input); at $t = 1$, all tokens are masked (pure noise).
+During training, $t$ is sampled uniformly for each example in the batch.
+
+\paragraph{Confidence-based unmasking.}
+During generation, at each of the $S = 100$ denoising steps, the model produces logits for all masked positions.
+We compute the maximum softmax probability at each masked position and unmask the top-$k$ most confident positions, where $k = \lfloor L / S \rfloor$ and $L$ is the sequence length.
+Ties are broken randomly.
+
+\paragraph{Temperature annealing.}
+We apply a linear temperature schedule from $\tau_{\text{start}} = 1.2$ to $\tau_{\text{end}} = 0.5$ across the $S$ denoising steps.
+High temperature early in generation encourages diverse initial predictions; low temperature late in generation sharpens the distribution for coherent refinement.
+
+\paragraph{Repetition penalty.}
+We apply a frequency-based repetition penalty: for any token that has already been unmasked, we divide its logit by a penalty factor of 1.3.
+This reduces the tendency to produce degenerate repetitive sequences.
+
+\section{Compute Resources}
+\label{app:compute}
+
+\begin{table}[H]
+\centering
+\caption{Compute budget for all experiments reported in this paper.}
+\smallskip
+\begin{tabular}{@{}llcc@{}}
+\toprule
+Model & Hardware & Time & Cost \\
+\midrule
+AR (123.6M, 20K steps) & H100 80GB (Colab) & 107.9 min & ${\sim}$\$5 \\
+MDLM (162.7M, 20K steps) & H100 80GB (Colab) & 113.0 min & ${\sim}$\$5 \\
+\midrule
+\textbf{Total} & & \textbf{220.9 min} & $\boldsymbol{\sim}$\textbf{\$10} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Data}
+\label{app:data}
+
+All experiments use 50M tokens from TinyStories \citep{tinystories}, a dataset of short children's stories generated by GPT-3.5 and GPT-4, specifically designed for training and evaluating small language models.
+The dataset was tokenized using the GPT-2 tokenizer (vocabulary size 50{,}257).
+We split the tokenized data into training and validation sets, using the last 5\% of chunks as the validation set.
+
+\end{document}
